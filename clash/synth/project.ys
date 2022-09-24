@@ -1,0 +1,28 @@
+read_verilog verilog/Lut2.topEntity/topEntity.v
+hierarchy -check
+proc
+flatten
+opt_expr
+opt_clean
+check
+opt -nodffe -nosdff
+fsm
+opt
+wreduce
+peepopt
+opt_clean
+opt
+memory -nomap
+opt_clean
+opt -fast -full
+memory_map
+opt -full
+techmap
+opt -full
+abc -g NAND,AND,OR,MUX -dff
+opt -full
+hierarchy -check
+stat
+check
+write_json synth/output.json
+show

@@ -87,7 +87,8 @@ data TileOutputRow (n :: Nat) = TileOutputRow {
 manualRow flashing config row = (t1, t2conf)
     where
         (t1, t1conf) = tile flashing config (mkTileInput <$> row <*> 0 <*> (leftr_in <$> row) <*> (right_out <$> t2))
-        (t2, t2conf) = tile flashing t1conf (mkTileInput <$> row <*> 1 <*> (left_out <$> t1) <*> (rightr_in <$> row))
+        (t2, t2conf) = tile flashing t1conf (mkTileInput <$> row <*> 1 <*> (left_out <$> t1) <*> (right_out <$> t3))
+        (t3, t3conf) = tile flashing t2conf (mkTileInput <$> row <*> 2 <*> (left_out <$> t2) <*> (rightr_out <$> row))
 
         mkTileInput row idx left right = TileInputs {
                 up_in = (upr_in row) !! idx,
