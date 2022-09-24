@@ -10,12 +10,26 @@ type Table = BitVector 4
 
 -- TODO: programmability?
 lut :: HiddenClockResetEnable dom =>
-    Signal dom Bit -> Signal dom (BitVector 2) -> Signal dom (BitVector 1, BitVector 1)
-lut config selector = bundle (lutOut, configOut) 
+    Signal dom Bool -> Signal dom Bit -> Signal dom (BitVector 2) -> 
+        Signal dom (BitVector 1, BitVector 1)
+lut flashing config selector = bundle (lutOut, configOut) 
     where
         lutOut = (\table sel -> fromIntegral $ table ! sel) <$> state <*> selector
         state' = id state -- TODO: hier programmability somehow?, shift regje toolen?
         state = register config state'
+
+        lut00conf = configReg flashing config
+        lut01conf = configReg flashing lut00conf
+        lut10conf = configReg flashing lut01conf
+        lut11conf = configReg flashing lut10conf
+        regmuxconf = configReg flashing lut11conf
+
+configReg :: HiddenClockResetEnable dom =>
+    Signal dom Bool -> Signal dom Bit -> Signal dom Bit
+configReg flashing config = dout
+    where
+        dout = register 0b0 new
+        new = mux flashing dout config
 
 halfAdder :: HiddenClockResetEnable dom =>
     Signal dom (Bit, Bit) -> Signal dom (BitVector 2)
@@ -78,13 +92,13 @@ tile inp = TileOutputs <$> up_out <*> left_out <*> down_out <*> right_out
         right_in1 = get 1 <$> (right_in <$> inp)
 
         up1 = lut 0b0000    (up_in0             `sconcat` up_in1)
-        up2 = lut 0b0000    (up_in2             `sconcat` (up1 +|+ left1))
+        up2 = lut 0b0000    ((up1 +|+ left1)    `sconcat` up_in2)
         left1 = lut 0b0000  (left_in0           `sconcat` left_in1)
-        left2 = lut 0b0000  (left_in2           `sconcat` (left1 +|+ up1)) 
+        left2 = lut 0b0000  ((left1 +|+ up1)    `sconcat` left_in2) 
         down1 = lut 0b0000  (down_in0           `sconcat` down_in1)
-        down2 = lut 0b0000  ((down1 +|+ left2) `sconcat` down_in0)
+        down2 = lut 0b0000  ((down1 +|+ left2)  `sconcat` down_in0)
         right1 = lut 0b0000 (right_in0          `sconcat` right_in1)
-        right2 = lut 0b0000 ((right1 +|+ up2)  `sconcat` right_in0)
+        right2 = lut 0b0000 ((right1 +|+ up2)   `sconcat` right_in0)
 
         (+|+) = liftA2 or
 
