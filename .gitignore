@@ -1,3 +1,11 @@
+
 .idea
 __pycache__
 results
+*.dyn_hi
+*.dyn_o
+*.hi
+*.o
+*vhdl/
+*verilog/
+
