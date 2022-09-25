@@ -1,5 +1,5 @@
 
 class Wire:
-    def __init__(self, i, o):
+    def __init__(self, o, i):
         self.input = i
         self.output = o

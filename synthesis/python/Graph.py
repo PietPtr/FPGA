@@ -16,6 +16,8 @@ class Graph:
         for wire in self.wires:
             wire.output.addWire(wire)
             wire.input.addWire(wire)
+            wire.input.output = wire.output
+
 
     def _calculate_dependencies(self):
         self.dependencies = {x: set() for x in self.inputs}
@@ -28,11 +30,13 @@ class Graph:
                 if isinstance(i, Register):
                     continue
 
-                if o in new_dependencies:
-                    new_dependencies[o] = new_dependencies[o].union(new_dependencies[i])
+                if o in new_dependencies and i in new_dependencies:
+                    new_dependencies[i] = new_dependencies[i].union(new_dependencies[o])
+                elif o in new_dependencies:
+                    new_dependencies[i] = set().union(new_dependencies[o])
                 else:
-                    new_dependencies[o] = set().union(new_dependencies[i])
-                new_dependencies[o].add(i)
+                    new_dependencies[i] = set()
+                new_dependencies[i].add(o)
             if new_dependencies == self.dependencies:
                 return
             self.dependencies = new_dependencies
