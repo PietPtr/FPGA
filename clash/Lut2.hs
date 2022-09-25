@@ -1,42 +1,65 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Lut2 where
 
 import Clash.Prelude hiding (Bit, or)
+
+import Data.Maybe
+import Debug.Trace
+import qualified Data.List as L
+import qualified Data.Text as T
 
 type Bit = BitVector 1
 
 type LutSelect = BitVector 2
 type LutOut = BitVector 1
 type Table = BitVector 4
+type Location = (Int, Int)
 
 routeFlash :: Maybe b -> b -> Maybe b
 routeFlash flash val = (const val) <$> flash
 
-get :: (Enum i, KnownNat n) => i -> BitVector n -> BitVector 1
-get idx vec = fromIntegral $ vec ! idx
+get :: (Show i, Enum i, KnownNat n) => i -> BitVector n -> BitVector 1
+get idx vec = -- trace (show vec L.++ " ! " L.++ show idx L.++ " = " L.++ show result) result
+    result
+    where
+        result = fromIntegral $ vec ! idx
 
-bitmux condition thenSig elseSig = if (resize condition) == (1 :: Bit) then thenSig else elseSig
 
-lut :: HiddenClockResetEnable dom =>
+lut :: HiddenClockResetEnable dom => Location ->
     Signal dom (Maybe Bit) -> Signal dom Bit -> Signal dom Bit ->
     (Signal dom Bit, Signal dom Bit, Signal dom (Maybe Bit))
-lut flash sel1 sel2 = (
-    bitmux <$> reg0muxconf <*> reg0Out <*> lut0Out,
-    bitmux <$> reg1muxconf <*> reg1Out <*> lut1Out,
-    routeFlash <$> flash <*> reg1muxconf)
+lut loc flash sel1 sel0 = (out0, out1, outflash)
     where
-        selector = (++#) <$> sel1 <*> sel2
+        out0 = outmux <$> flash <*> reg0muxconf <*> reg0Out <*> lut0Out
+        out1 = outmux <$> flash <*> reg1muxconf <*> reg1Out <*> lut1Out
+        outmux flash condition thenSig elseSig = case (condition, flash) of
+                (_, Just _) -> 0
+                (1, Nothing) -> thenSig
+                (0, Nothing) -> elseSig
+        
+        outflash = routeFlash <$> flash <*> reg1muxconf
 
-        lut0Out = get <$> ((*2) <$> selector)        <*> configState
-        lut1Out = get <$> ((\s->2*s+1) <$> selector) <*> configState
+        selector = (++#) <$> sel1 <*> sel0
+
+        lut0Out = get <$> (evenSelector <$> selector)        <*> configState
+        lut1Out = get <$> ((\s -> evenSelector s + 1) <$> selector) <*> configState
+
+        evenSelector :: BitVector 2 -> BitVector 3
+        evenSelector selector = 2 * (resize selector)
 
         reg0Out = register (0 :: Bit) lut0Out
         reg1Out = register (0 :: Bit) lut1Out
 
-        configState = configReg (0b1100000000 :: BitVector 10) flash
+        configState = traceSignal1 "conf" $ configReg (0b1100000000 :: BitVector 10) flash
 
         reg0muxconf = get <$> 8 <*> configState
         reg1muxconf = get <$> 9 <*> configState
 
+traceReg :: (Show a, NFDataX a, HiddenClockResetEnable dom) =>
+    String -> a -> Signal dom a -> Signal dom a
+traceReg name initial = mealy machine initial
+    where
+        machine state inp = (trace (name L.++ " " L.++ show inp) inp, state)
 
 configReg :: (HiddenClockResetEnable dom, KnownNat n) =>
     (BitVector n) -> Signal dom (Maybe Bit) -> Signal dom (BitVector n)
@@ -107,6 +130,15 @@ instance (KnownNat n) => Default (FPGAInput n) where
         rightf_in = repeat 0
     }
 
+main :: IO ()
+main = do
+    let configSig = pure $ Just 1
+    let topOut = topEntity systemClockGen systemResetGen enableGen configSig (pure def)
+    vcd <- dumpVCD (0, 100) topOut ["conf"]
+    case vcd of
+        Left msg -> error msg
+        Right contents -> writeFile "mainCounter.vcd" $ T.unpack contents
+
 topEntity ::
     Clock System
     -> Reset System
@@ -123,7 +155,7 @@ manualFPGA flash inp = out <$> rows
         (r1, r1conf) = manualRow flash  $ mkRowInput <$> inp <*> 0 <*> (downr_out <$> r2) <*> (downf_in <$> inp)
         (r2, r2conf) = manualRow r1conf $ mkRowInput <$> inp <*> 1 <*> (downr_out <$> r3) <*> (upr_out <$> r1)
         (r3, r3conf) = manualRow r2conf $ mkRowInput <$> inp <*> 2 <*> (downr_out <$> r4) <*> (upr_out <$> r2)
-        (r4, r4conf) = manualRow r4conf $ mkRowInput <$> inp <*> 3 <*> (downf_in <$> inp) <*> (upr_out <$> r3)
+        (r4, r4conf) = manualRow r3conf $ mkRowInput <$> inp <*> 3 <*> (downf_in <$> inp) <*> (upr_out <$> r3)
         rows = bundle (r1:>r2:>r3:>r4:>Nil)
 
         mkRowInput inp idx up down = TileInputRow {
