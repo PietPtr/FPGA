@@ -7,13 +7,22 @@ import Data.Maybe
 import Debug.Trace
 import qualified Data.List as L
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 
 type Bit = BitVector 1
 
 type LutSelect = BitVector 2
 type LutOut = BitVector 1
 type Table = BitVector 4
-type Location = (Int, Int)
+data Dir = Horz | Vert
+data Location = Location Int Int Dir
+
+instance Show Dir where
+    show Horz = "h"
+    show Vert = "v"
+
+instance Show Location where
+    show (Location x y dir) = show x L.++ "_" L.++ show y L.++ "_" L.++ show dir
 
 routeFlash :: Maybe b -> b -> Maybe b
 routeFlash flash val = (const val) <$> flash
@@ -50,7 +59,8 @@ lut loc flash sel1 sel0 = (out0, out1, outflash)
         reg0Out = register (0 :: Bit) lut0Out
         reg1Out = register (0 :: Bit) lut1Out
 
-        configState = traceSignal1 "conf" $ configReg (0b1100000000 :: BitVector 10) flash
+        configState = traceSignal1 confName $ configReg (0b0000000000 :: BitVector 10) flash
+        confName = "conf_" L.++ show loc
 
         reg0muxconf = get <$> 8 <*> configState
         reg1muxconf = get <$> 9 <*> configState
@@ -134,10 +144,10 @@ main :: IO ()
 main = do
     let configSig = pure $ Just 1
     let topOut = topEntity systemClockGen systemResetGen enableGen configSig (pure def)
-    vcd <- dumpVCD (0, 100) topOut ["conf"]
+    vcd <- dumpVCD (0, 203) topOut ["conf_0_3_v"]
     case vcd of
         Left msg -> error msg
-        Right contents -> writeFile "mainCounter.vcd" $ T.unpack contents
+        Right contents -> TIO.writeFile "fpga.vcd" contents
 
 topEntity ::
     Clock System
@@ -152,10 +162,10 @@ manualFPGA :: HiddenClockResetEnable dom =>
     Signal dom (Maybe Bit) -> Signal dom (FPGAInput 4) -> Signal dom (FPGAOutput 4)
 manualFPGA flash inp = out <$> rows
     where
-        (r1, r1conf) = manualRow flash  $ mkRowInput <$> inp <*> 0 <*> (downr_out <$> r2) <*> (downf_in <$> inp)
-        (r2, r2conf) = manualRow r1conf $ mkRowInput <$> inp <*> 1 <*> (downr_out <$> r3) <*> (upr_out <$> r1)
-        (r3, r3conf) = manualRow r2conf $ mkRowInput <$> inp <*> 2 <*> (downr_out <$> r4) <*> (upr_out <$> r2)
-        (r4, r4conf) = manualRow r3conf $ mkRowInput <$> inp <*> 3 <*> (downf_in <$> inp) <*> (upr_out <$> r3)
+        (r1, r1conf) = manualRow 0 flash  $ mkRowInput <$> inp <*> 0 <*> (downr_out <$> r2) <*> (downf_in <$> inp)
+        (r2, r2conf) = manualRow 1 r1conf $ mkRowInput <$> inp <*> 1 <*> (downr_out <$> r3) <*> (upr_out <$> r1)
+        (r3, r3conf) = manualRow 2 r2conf $ mkRowInput <$> inp <*> 2 <*> (downr_out <$> r4) <*> (upr_out <$> r2)
+        (r4, r4conf) = manualRow 3 r3conf $ mkRowInput <$> inp <*> 3 <*> (downf_in <$> inp) <*> (upr_out <$> r3)
         rows = bundle (r1:>r2:>r3:>r4:>Nil)
 
         mkRowInput inp idx up down = TileInputRow {
@@ -173,12 +183,12 @@ manualFPGA flash inp = out <$> rows
         }
 
 -- TODO: Template haskell misschien dan maar gewoon???
-manualRow flash row = (out <$> tiles, t2conf)
+manualRow rowNum flash row = (out <$> tiles, t2conf)
     where
-        (t1, t1conf) = tile flash  (mkTileInput <$> row <*> 0 <*> (left_out <$> t2) <*> (leftr_in <$> row))
-        (t2, t2conf) = tile t1conf (mkTileInput <$> row <*> 1 <*> (left_out <$> t3) <*> (right_out <$> t1))
-        (t3, t3conf) = tile t2conf (mkTileInput <$> row <*> 2 <*> (left_out <$> t4) <*> (right_out <$> t2))
-        (t4, t4conf) = tile t3conf (mkTileInput <$> row <*> 3 <*> (rightr_in <$> row) <*> (right_out <$> t3))
+        (t1, t1conf) = tile (0, rowNum) flash  (mkTileInput <$> row <*> 0 <*> (left_out <$> t2) <*> (leftr_in <$> row))
+        (t2, t2conf) = tile (1, rowNum) t1conf (mkTileInput <$> row <*> 1 <*> (left_out <$> t3) <*> (right_out <$> t1))
+        (t3, t3conf) = tile (2, rowNum) t2conf (mkTileInput <$> row <*> 2 <*> (left_out <$> t4) <*> (right_out <$> t2))
+        (t4, t4conf) = tile (3, rowNum) t3conf (mkTileInput <$> row <*> 3 <*> (rightr_in <$> row) <*> (right_out <$> t3))
         tiles = bundle (t1:>t2:>t3:>t4:>Nil)
 
         mkTileInput row idx left right = TileInputs {
@@ -199,14 +209,10 @@ or :: Bit -> Bit -> Bit
 or 0 0 = 0
 or _ _ = 1
 
-tileCurry flash leftIn rightIn upIn downIn = tile flash tileInput
-    where
-        tileInput = TileInputs <$> upIn <*> leftIn <*> downIn <*> rightIn
-
-tile :: HiddenClockResetEnable dom =>
+tile :: HiddenClockResetEnable dom => (Int, Int) ->
     Signal dom (Maybe Bit) -> Signal dom TileInputs -> 
     (Signal dom TileOutputs, Signal dom (Maybe Bit))
-tile flash inp = (TileOutputs <$> up_out <*> left_out <*> down_out <*> right_out, vertconf)
+tile (x, y) flash inp = (TileOutputs <$> up_out <*> left_out <*> down_out <*> right_out, vertconf)
     where
         up_out = up
         left_out = left
@@ -218,8 +224,8 @@ tile flash inp = (TileOutputs <$> up_out <*> left_out <*> down_out <*> right_out
         d_in = down_in <$> inp
         r_in = right_in <$> inp
 
-        (left, right, horzconf) = lut flash r_in (l_in +|+ down)  
-        (up, down, vertconf)    = lut horzconf u_in (d_in +|+ right)
+        (left, right, horzconf) = lut (Location x y Horz) flash r_in (l_in +|+ down)  
+        (up, down, vertconf)    = lut (Location x y Vert) horzconf u_in (d_in +|+ right)
 
         (+|+) = liftA2 or
 
