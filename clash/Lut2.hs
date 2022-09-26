@@ -206,7 +206,7 @@ tileCurry flash leftIn rightIn upIn downIn = tile flash tileInput
 tile :: HiddenClockResetEnable dom =>
     Signal dom (Maybe Bit) -> Signal dom TileInputs -> 
     (Signal dom TileOutputs, Signal dom (Maybe Bit))
-tile flash inp = (TileOutputs <$> up_out <*> left_out <*> down_out <*> right_out, vertconf)
+tile flash inp = (TileOutputs <$> up_out <*> left_out <*> down_out <*> right_out, horzconf)
     where
         up_out = up
         left_out = left
@@ -218,8 +218,8 @@ tile flash inp = (TileOutputs <$> up_out <*> left_out <*> down_out <*> right_out
         d_in = down_in <$> inp
         r_in = right_in <$> inp
 
-        (left, right, horzconf) = lut flash r_in (l_in +|+ down)  
-        (up, down, vertconf)    = lut horzconf u_in (d_in +|+ right)
+        (left, right, vertconf) = lut flash r_in (l_in +|+ down)
+        (down, up, horzconf)    = lut vertconf u_in (d_in +|+ right)
 
         (+|+) = liftA2 or
 
