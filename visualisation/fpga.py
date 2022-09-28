@@ -1,6 +1,7 @@
 import pygame
 from consts import *
 from math import *
+import random
 
 class FPGA:
     def __init__(self, width, height):
@@ -50,12 +51,15 @@ class Tile:
     def dx(self):
         return self.x * SIZE
 
+    def pos(self):
+        return (self.dx(),self.dy())
+
     def draw(self, surface):
         pygame.draw.rect(surface, white, pygame.Rect(
             self.dx(), self.dy(), SIZE, SIZE))
 
-        coordinate = font.render(f'{self.x},{self.y}', False, (0, 0, 0))
-        surface.blit(coordinate, (self.dx(),self.dy()))
+        coordinate = font.render(f'{self.x},{self.y}', False, black)
+        surface.blit(coordinate, self.pos())
 
         def connect_output(tile_connection, lutname, outputname):
             self.connect[tile_connection].draw_connect(surface, self.luts[lutname].outputs[outputname])
@@ -91,19 +95,43 @@ class LUT:
             "b": Input(self, self.length - 0.1 * SIZE, 0)
         }
 
+        p_height = self.length - 0.1 * SIZE
+        q_height = 0.1 * SIZE
         self.outputs = {
-            "p": Output(self, self.length - 0.1 * SIZE, self.width),
-            "q": Output(self, 0.1 * SIZE, 0)
+            "p": Output(self, p_height, self.width),
+            "q": Output(self, q_height, 0)
+        }
+
+        reg_offset = SIZE*0.07
+        self.registers = {
+            "r0": Register(self, p_height, -reg_offset, True), # TODO: baseer dit eens op de config
+            "r1": Register(self, q_height, self.width + reg_offset, True)
         }
 
         self.x = (SIZE - self.length) * 0.3
         self.y = (SIZE - self.width) - SIZE * 0.1
 
-    def dx(self):
-        return self.tile.dx() + (self.x if self.horizontal else self.y)
+        self.config_obj = LUTConfig(self, "00011011") # TODO: ook uit config
 
+    def orient(self, x, y, w, h):
+        if self.horizontal:
+            return (x, y, w, h)
+        else:
+            return (y, x, h, w)
+
+    # x position relative to parent
+    def dx(self):
+        return (self.x if self.horizontal else self.y)
+
+    # y position relative to parent
     def dy(self):
-        return self.tile.dy() + (self.y if self.horizontal else self.x)
+        return (self.y if self.horizontal else self.x)
+
+    # always the same i guess
+    # position on screen
+    def pos(self):
+        (px, py) = self.tile.pos()
+        return (px + self.dx(), py + self.dy())
 
     def draw(self, surface):
         x = self.dx()
@@ -111,7 +139,7 @@ class LUT:
         l = self.length if self.horizontal else self.width
         w = self.width if self.horizontal else self.length
         
-        pygame.draw.rect(surface, black, pygame.Rect(x, y, l, w), width=LINE)
+        pygame.draw.rect(surface, black, pygame.Rect(self.pos(), (l, w)), width=LINE)
 
         for name, input in self.inputs.items():
             input.draw(surface, name)
@@ -119,14 +147,26 @@ class LUT:
         for name, output in self.outputs.items():
             output.draw(surface, name)
 
+        for name, register in self.registers.items():
+            register.draw(surface, name)
+
+        self.config_obj.draw(surface)
+
 class Connect:
     def __init__(self, parent, x_offset, y_offset):
         self.parent = parent
         self.x_offset = x_offset
         self.y_offset = y_offset
 
+    def dx(self):
+        return self.x_offset
+    
+    def dy(self):
+        return self.y_offset
+
     def pos(self):
-        return (self.parent.dx() + self.x_offset, self.parent.dy() + self.y_offset)
+        (px, py) = self.parent.pos()
+        return (px + self.dx(), py + self.dy())
 
     def draw_connect(self, surface, other):
         pygame.draw.line(surface, black, other.pos(), self.pos())
@@ -143,16 +183,16 @@ class Input(Connect):
             self.y_offset = x_offset
 
     def draw(self, surface, name):
-        (x, y) = self.pos()
-        self._draw(surface, x, y, name)
+        self._draw(surface, self.pos(), name)
 
-    def _draw(self, surface, x, y, name):
+    def _draw(self, surface, pos, name):
         radius = SIZE * 0.03
-        pygame.draw.circle(surface, white, (x, y), radius)
-        pygame.draw.circle(surface, black, (x, y), radius, width=LINE)
+        (x, y) = pos
+        pygame.draw.circle(surface, white, pos, radius)
+        pygame.draw.circle(surface, black, pos, radius, width=LINE)
 
         str = f'{name}'
-        inp_name = font.render(str, False, (0, 0, 0))
+        inp_name = font.render(str, False, black)
         (fx, fy) = font.size(str)
         surface.blit(inp_name, (x - fx/2, y - fy/2))
 
@@ -160,13 +200,90 @@ class Output(Input):
     def __init__(self, parent, x_offset, y_offset):
         Input.__init__(self, parent, x_offset, y_offset)
     
-    def _draw(self, surface, x, y, name):
+    def _draw(self, surface, pos, name):
         sidelength = SIZE * 0.053/2
+        (x, y) = pos
         rect = pygame.Rect(x - sidelength, y - sidelength, sidelength * 2, sidelength * 2)
-        pygame.draw.rect(surface, white, rect)
-        pygame.draw.rect(surface, black, rect, width=LINE)
+        draw_box(surface, rect)
 
         str = f'{name}'
-        inp_name = font.render(str, False, (0, 0, 0))
+        inp_name = font.render(str, False, black)
         (fx, fy) = font.size(str)
         surface.blit(inp_name, (x - fx / 2, y - fy / 2))
+
+class Register:
+    def __init__(self, parent, x, y, state):
+        self.parent = parent
+
+        self.x = x if self.parent.horizontal else y
+        self.y = (-y + self.parent.width) if self.parent.horizontal else x
+        w = SIZE * 0.053/2
+        h = 2 * w
+        self.width = w if self.parent.horizontal else h
+        self.height = h if self.parent.horizontal else w
+
+        self.state = state
+
+    def dx(self):
+        return self.x
+
+    def dy(self):
+        return self.y
+
+    def pos(self):
+        (px, py) = self.parent.pos()
+        return (px + self.dx() - self.width / 2, py + self.dy() - self.height / 2)
+
+    def draw(self, surface, name):
+        (x, y) = self.pos()
+        rect = pygame.Rect(self.pos(), (self.width, self.height))
+
+        color = gray
+        if self.state:
+            draw_box(surface, rect)
+            color = black
+
+        str = f'{name}'
+        inp_name = font.render(str, False, color)
+        offset = SIZE * 0.03
+        surface.blit(inp_name, (x + offset, y) if self.parent.horizontal else (x, y + offset))
+
+
+class LUTConfig:
+    def __init__(self, parent, config):
+        self.parent = parent
+        self.config = config
+        self.config_r = "".join(list(reversed(config))) # [0] = LSB
+
+        self.a_pos = self.parent.inputs["a"].pos()
+        self.b_pos = self.parent.inputs["b"].pos()
+
+    def dy(self):
+        return SIZE * 0.005 if self.parent.horizontal else SIZE * 0.14
+    def dx(self):
+        return SIZE * 0.17 if self.parent.horizontal else SIZE * 0.03
+
+    def pos(self):
+        (px, py) = self.parent.pos()
+        return (px + self.dx(), py + self.dy())
+
+    def draw_turnaround(self, surface):
+        pass # TODO: hoe dit nice, liever met SVG of png eigenlijk
+
+    def draw(self, surface):
+        if self.config == "00000000":
+            pass
+        elif self.config == "00011011":
+            self.draw_turnaround(surface)
+        else:
+            (x, y) = self.pos()
+            for i in range(4):
+                text = f'{i:02b}↦{self.config_r[i*2:i*2+2]}'
+                table_line = font.render(text, False, black)
+                (fx, fy) = font.size(text)
+                surface.blit(table_line, (x, y + i * fy))
+
+def add_tup(v1, v2):
+    (ax, ay) = v1
+    (bx, by) = v2
+    return (ax + bx, ay + by)

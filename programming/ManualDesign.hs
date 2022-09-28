@@ -19,8 +19,7 @@ boringConfig = FPGAConfig $ Map.fromList [
         (FPGACoordinate 0 1, TileConfig (LUTConfig 7 False True) (LUTConfig 0xaa False False))
     ]
 
-invertedTurnaround = toLut f
-    where f (a, b) = (not a, not b)
+invertedTurnaround = toLut $ \(a, b) -> (not a, not b)
 
 turnAround = toLut @Bit id
 forward_a = toLut @Bit $ \(a, b) -> (0, a)
