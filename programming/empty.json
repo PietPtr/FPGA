@@ -1,0 +1,8 @@
+{
+  "horzLut": {
+    "lutConfig": "00000000",
+    "enableReg1": true,
+    "enableReg0": true
+  },
+  "vertLut": { "lutConfig": "00000000", "enableReg1": true, "enableReg0": true }
+}

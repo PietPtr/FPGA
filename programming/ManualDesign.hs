@@ -21,18 +21,24 @@ boringConfig = FPGAConfig $ Map.fromList [
 
 invertedTurnaround = toLut $ \(a, b) -> (not a, not b)
 
+-- (a, b) -> (p, q)
 turnAround = toLut @Bit id
-forward_a = toLut @Bit $ \(a, b) -> (0, a)
-forward_b = toLut @Bit $ \(a, b) -> (b, 0)
+forward_a = toLut @Bit $ \(a, _) -> (0, a)
+forward_b = toLut @Bit $ \(_, b) -> (b, 0)
+forward = toLut @Bit $ \(a, b) -> (b, a)
+p_is_not_a = toLut $ \(a, _) -> (not a, False)
+q_is_not_b = toLut $ \(_, b) -> (False, not b)
+p_is_a = toLut @Bit $ \(a, _) -> (a, 0)
+q_is_b = toLut @Bit $ \(_, b) -> (0, b)
 
 clockConfig = FPGAConfig $ Map.fromList [
         (FPGACoordinate 0 0, TileConfig {
             horzLut = def,
-            vertLut = LUTConfig turnAround False False
+            vertLut = LUTConfig q_is_not_b False False
         }),
         (FPGACoordinate 1 0, TileConfig {
             horzLut = LUTConfig forward_b False False,
-            vertLut = LUTConfig turnAround True False
+            vertLut = LUTConfig p_is_a True False
         })
     ]
 
@@ -60,10 +66,10 @@ toLut f =
 
 pretty :: BitVector 8 -> IO ()
 pretty bv = do
-    putStrLn "ab | pq"
+    putStrLn "ba | qp"
     putStrLn $ "00 | " ++ show l00
-    putStrLn $ "10 | " ++ show l10
     putStrLn $ "01 | " ++ show l01
+    putStrLn $ "10 | " ++ show l10
     putStrLn $ "11 | " ++ show l11
     where
         l00 = slice d1 d0 bv

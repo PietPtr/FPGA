@@ -4,7 +4,8 @@ from math import *
 import random
 
 class FPGA:
-    def __init__(self, width, height):
+    def __init__(self, config, width, height):
+        self.config = config
         self.width = width
         self.height = height
 
@@ -12,21 +13,26 @@ class FPGA:
 
         for x in range(self.width):
             for y in range(self.height):
-                self.tiles.append(Tile(self, x, y))
+                try:
+                    lut_config = self.config['tiles'][str(x) + ',' + str(y)]
+                except KeyError:
+                    lut_config = DEFAULT_LUT_CONFIG
+                self.tiles.append(Tile(self, lut_config, x, y))
 
     def draw(self, surface):
         for tile in self.tiles:
             tile.draw(surface)
     
 class Tile:
-    def __init__(self, fpga, x, y):
+    def __init__(self, fpga, config, x, y):
         self.fpga = fpga
+        self.config = config
         self.x = x
         self.y = y
 
         self.luts = {
-            "horz": LUT(self, True),
-            "vert": LUT(self, False)
+            "horz": LUT(self, config['horzLut'], True),
+            "vert": LUT(self, config['vertLut'], False)
         }
 
         q_y = SIZE * 0.25
@@ -44,6 +50,11 @@ class Tile:
             "down_out": Connect(self, p_x, SIZE),
             "right_out": Connect(self, SIZE, q_y)
         }
+
+        self.wire_combinators = [
+            WireCombinator(self, a_x, q_y),
+            WireCombinator(self, p_x, b_y)
+        ]
 
     def dy(self):
         return (self.fpga.height - self.y - 1) * SIZE
@@ -81,14 +92,18 @@ class Tile:
         for _, connect in self.connect.items():
             connect.draw_debug(surface)
 
+        for comb in self.wire_combinators:
+            comb.draw(surface)
+
+
 
 
 class LUT:
-    def __init__(self, tile, horizontal):
+    def __init__(self, tile, config, horizontal):
         self.tile = tile
+        self.config = config
         self.horizontal = horizontal
-        self.length = SIZE * 0.5
-        self.width = self.length * 0.4
+        (self.width, self.length) = LUTSIZE
         
         self.inputs = {
             "a": Input(self, 0.1 * SIZE, self.width),
@@ -104,14 +119,15 @@ class LUT:
 
         reg_offset = SIZE*0.07
         self.registers = {
-            "r0": Register(self, p_height, -reg_offset, True), # TODO: baseer dit eens op de config
-            "r1": Register(self, q_height, self.width + reg_offset, True)
+            "r0": Register(self, p_height, -reg_offset, self.config['enableReg0']),
+            "r1": Register(self, q_height, self.width + reg_offset, self.config['enableReg1'])
         }
 
         self.x = (SIZE - self.length) * 0.3
         self.y = (SIZE - self.width) - SIZE * 0.1
 
-        self.config_obj = LUTConfig(self, "00011011") # TODO: ook uit config
+        randstr = "".join([random.choice("01") for x in [x for x in range(8)]])
+        self.config_obj = LUTConfig(self, self.config['lutConfig'])
 
     def orient(self, x, y, w, h):
         if self.horizontal:
@@ -141,6 +157,8 @@ class LUT:
         
         pygame.draw.rect(surface, black, pygame.Rect(self.pos(), (l, w)), width=LINE)
 
+        self.config_obj.draw(surface)
+
         for name, input in self.inputs.items():
             input.draw(surface, name)
 
@@ -150,7 +168,6 @@ class LUT:
         for name, register in self.registers.items():
             register.draw(surface, name)
 
-        self.config_obj.draw(surface)
 
 class Connect:
     def __init__(self, parent, x_offset, y_offset):
@@ -211,6 +228,27 @@ class Output(Input):
         (fx, fy) = font.size(str)
         surface.blit(inp_name, (x - fx / 2, y - fy / 2))
 
+class WireCombinator:
+    def __init__(self, parent, x, y):
+        self.tile = parent
+        self.x = x
+        self.y = y
+
+    def dx(self):
+        return self.x
+    
+    def dy(self):
+        return self.y
+
+    def pos(self):
+        (px, py) = self.tile.pos()
+        return (px + self.dx(), py + self.dy())
+
+    def draw(self, surface):
+        radius = SIZE * 0.02
+        pygame.draw.circle(surface, black, self.pos(), radius)
+    
+
 class Register:
     def __init__(self, parent, x, y, state):
         self.parent = parent
@@ -267,18 +305,16 @@ class LUTConfig:
         (px, py) = self.parent.pos()
         return (px + self.dx(), py + self.dy())
 
-    def draw_turnaround(self, surface):
-        pass # TODO: hoe dit nice, liever met SVG of png eigenlijk
-
     def draw(self, surface):
-        if self.config == "00000000":
-            pass
-        elif self.config == "00011011":
-            self.draw_turnaround(surface)
+        if self.config in resource_map:
+            surf = resource_map[self.config]
+            if self.parent.horizontal:
+                surf = pygame.transform.rotate(surf, 90)
+            surface.blit(surf, self.parent.pos())
         else:
             (x, y) = self.pos()
             for i in range(4):
-                text = f'{i:02b}↦{self.config_r[i*2:i*2+2]}'
+                text = f'{i:02b}:{self.config_r[i*2:i*2+2]}'
                 table_line = font.render(text, False, black)
                 (fx, fy) = font.size(text)
                 surface.blit(table_line, (x, y + i * fy))

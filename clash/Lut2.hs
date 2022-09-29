@@ -37,33 +37,33 @@ get idx vec = -- trace (show vec L.++ " ! " L.++ show idx L.++ " = " L.++ show r
 lut :: HiddenClockResetEnable dom => Location ->
     Signal dom (Maybe Bit) -> Signal dom Bit -> Signal dom Bit ->
     (Signal dom Bit, Signal dom Bit, Signal dom (Maybe Bit))
-lut loc flash sel1 sel0 = (out0, out1, outflash)
+lut loc flash b a = (p, q, outflash)
     where
-        out0 = outmux <$> flash <*> reg0muxconf <*> reg0Out <*> lut0Out
-        out1 = outmux <$> flash <*> reg1muxconf <*> reg1Out <*> lut1Out
+        p = outmux <$> flash <*> pmuxconf <*> regpOut <*> pOut
+        q = outmux <$> flash <*> qmuxconf <*> regqOut <*> qOut
         outmux flash condition thenSig elseSig = case (condition, flash) of
                 (_, Just _) -> 0
                 (1, Nothing) -> thenSig
                 (0, Nothing) -> elseSig
         
-        outflash = routeFlash <$> flash <*> reg1muxconf
+        outflash = routeFlash <$> flash <*> qmuxconf
 
-        selector = (++#) <$> sel1 <*> sel0
+        selector = (++#) <$> b <*> a
 
-        lut0Out = get <$> (evenSelector <$> selector)        <*> configState
-        lut1Out = get <$> ((\s -> evenSelector s + 1) <$> selector) <*> configState
+        pOut = get <$> (evenSelector <$> selector)        <*> configState
+        qOut = get <$> ((\s -> evenSelector s + 1) <$> selector) <*> configState
 
         evenSelector :: BitVector 2 -> BitVector 3
         evenSelector selector = 2 * (resize selector)
 
-        reg0Out = register (0 :: Bit) lut0Out
-        reg1Out = register (0 :: Bit) lut1Out
+        regpOut = register (0 :: Bit) pOut
+        regqOut = register (0 :: Bit) qOut
 
-        configState = traceSignal1 confName $ configReg (0b0000000000 :: BitVector 10) flash
+        configState = traceSignal1 confName $ configReg (0b1100000000 :: BitVector 10) flash
         confName = "conf_" L.++ show loc
 
-        reg0muxconf = get <$> 8 <*> configState
-        reg1muxconf = get <$> 9 <*> configState
+        pmuxconf = get <$> 8 <*> configState
+        qmuxconf = get <$> 9 <*> configState
 
 traceReg :: (Show a, NFDataX a, HiddenClockResetEnable dom) =>
     String -> a -> Signal dom a -> Signal dom a
@@ -72,7 +72,7 @@ traceReg name initial = mealy machine initial
         machine state inp = (trace (name L.++ " " L.++ show inp) inp, state)
 
 configReg :: (HiddenClockResetEnable dom, KnownNat n) =>
-    (BitVector n) -> Signal dom (Maybe Bit) -> Signal dom (BitVector n)
+    String -> (BitVector n) -> Signal dom (Maybe Bit) -> Signal dom (BitVector n)
 configReg initial flash = dout
     where
         dout = register initial new

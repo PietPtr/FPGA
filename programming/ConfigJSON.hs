@@ -13,6 +13,23 @@ import Data.List
 
 import GHC.Generics
 
+{-
+QUICK FACTS
+- LSB is the last element of the string
+- format is thus qpqpqpqp
+- b++#a is the selector, hence the truth table is in "reverse"
+So the bitstring 87654321 encodes the table:
+b a | q p
+0 0 | 2 1
+0 1 | 4 3
+1 0 | 6 5
+1 1 | 8 7
+
+-}
+
+
+
+
 instance ToJSON (BitVector 8) where
     toJSON bv = String $ pack $ (filter (/= '_') $ show bv)
 
