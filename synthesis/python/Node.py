@@ -1,5 +1,7 @@
 from enum import Enum
 
+from Vec2 import Vec2
+
 
 class State(Enum):
     DEFAULT = 0b0000
@@ -26,12 +28,16 @@ class Port:
     def addWire(self, wire):
         self.wires.append(wire)
 
+    def __lt__(self, other):
+        return id(self) < id(other)
+
 
 class Node:
     def __init__(self, label):
         self.label = label
         self.inputs = []
         self.outputs = []
+        self.position = Vec2(0.0, 0.0)
         pass
 
     def __repr__(self):

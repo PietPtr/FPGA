@@ -6,7 +6,7 @@ from copy import deepcopy
 
 from fpga.Location import Location
 from render.visualise import visualise
-from search import astar
+from search import astar, astar2
 
 
 class Synthesizer:
@@ -99,14 +99,14 @@ class Synthesizer:
         existing_nets = grid.signals[signal]
         start = random.choice(existing_nets)
 
-        path = astar(grid, location, start, signal, [])
+        path = astar2(grid, grid.getNet(location), grid.getNet(start))
         if not path:
             print("COULD NOT FIND PATH TO OUTPUT")
             return False
 
         for n in path[1:]:
-            grid.link(start, n)
-            start = n
+            grid.link(start, n.location)
+            start = n.location
 
     def place_lut(self, node: Lut, grid, tries):
         print(f"RUNNING PLACEMENT WITH BLACKLIST: {tries}")
@@ -138,43 +138,25 @@ class Synthesizer:
         print(f"net0_start, {net0_start}, net1_start: {net1_start}")
         print(f"BLACKLIST before loop: {blacklist}")
 
-        while len(grid.find_shared_lut_inputs(net0_start, net1_start)) == 0:
-            if net0_start in blacklist:
-                path0 = astar(grid, goal=net0_start.down(3), start=net0_start, signal=node0_tag, blacklist=[])
-                if not path0:
-                    print(f"A NO PATH FROM {net0_start} to {net0_start.down(3)}")
-                    return False, []
-                grid.link(net0_start, path0[1])
-                net0_start = path0[1]
-                continue
-
-            if net1_start in blacklist:
-                path1 = astar(grid, goal=net1_start.down(3), start=net1_start, signal=node1_tag, blacklist=[])
-                if not path1:
-                    print(f"B NO PATH FROM {net1_start} to {net1_start.down(3)}")
-                    return False, []
-                grid.link(net1_start, path1[1])
-                net1_start = path1[1]
-                continue
-
-            print("LOOP")
-            visualise(grid)
-
-            path0 = astar(grid, goal=net1_start, start=net0_start, signal=node0_tag, blacklist=blacklist)
-            path1 = astar(grid, goal=net0_start, start=net1_start, signal=node1_tag, blacklist=blacklist)
+        while True:
+            path0 = astar2(grid, goal=grid.getNet(net1_start), start=grid.getNet(net0_start))
+            path1 = astar2(grid, goal=grid.getNet(net0_start), start=grid.getNet(net1_start))
             if not path0 or not path1:
                 return False, []
             print(path0, path1)
-            if len(path0) < len(path1):
+            if len(path0) <= len(path1):
+                if len(path0) == 1:
+                    break
                 print("select path 0")
-                grid.link(net0_start, path0[1])
-                net0_start = path0[1]
+                grid.link(path0[0].location, path0[1].location)
+                net0_start = path0[1].location
             else:
+                if len(path1) == 1:
+                    break
                 print("select path 1")
-                grid.link(net1_start, path1[1])
-                net1_start = path1[1]
+                grid.link(path1[0].location, path1[1].location)
+                net1_start = path1[1].location
 
-        assert net0_start.distance(net1_start) <= 1
 
         visualise(grid)
         # Find the lut connecting the two.
