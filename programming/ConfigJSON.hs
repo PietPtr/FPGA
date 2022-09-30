@@ -24,11 +24,7 @@ b a | q p
 0 1 | 4 3
 1 0 | 6 5
 1 1 | 8 7
-
 -}
-
-
-
 
 instance ToJSON (BitVector 8) where
     toJSON bv = String $ pack $ (filter (/= '_') $ show bv)
