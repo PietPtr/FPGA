@@ -1,0 +1,1 @@
+{"tiles":{"0,0":{"horzLut":{"lutConfig":"00000000","enableReg1":true,"enableReg0":true},"vertLut":{"lutConfig":"00010001","enableReg1":false,"enableReg0":false}},"1,0":{"horzLut":{"lutConfig":"10001000","enableReg1":false,"enableReg0":false},"vertLut":{"lutConfig":"10100000","enableReg1":false,"enableReg0":true}}}}
