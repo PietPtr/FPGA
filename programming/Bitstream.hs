@@ -8,7 +8,6 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 
 import ConfigJSON
-import ManualDesign
 
 import Debug.Trace
 

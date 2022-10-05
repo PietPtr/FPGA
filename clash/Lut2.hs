@@ -59,23 +59,28 @@ lut loc flash b a = (p, q, outflash)
         regpOut = register (0 :: Bit) pOut
         regqOut = register (0 :: Bit) qOut
 
-        configState = traceSignal1 confName $ configReg (0b1100000000 :: BitVector 10) flash
+        configState = -- traceSignal1 confName $ 
+            configReg confName (0b1100000000 :: BitVector 10) flash
         confName = "conf_" L.++ show loc
 
         pmuxconf = get <$> 8 <*> configState
         qmuxconf = get <$> 9 <*> configState
 
-traceReg :: (Show a, NFDataX a, HiddenClockResetEnable dom) =>
+traceReg :: forall a dom . (Show a, NFDataX a, HiddenClockResetEnable dom) =>
     String -> a -> Signal dom a -> Signal dom a
-traceReg name initial = mealy machine initial
+traceReg name initial = mealy machine (0, initial)
     where
-        machine state inp = (trace (name L.++ " " L.++ show inp) inp, state)
+        machine :: (Int, a) -> a -> ((Int, a), a)
+        machine (cycle, state) inp = (trace str (cycle + 1, inp), state)
+            where
+                str = show cycle L.++ "," L.++ name L.++ "," L.++ show inp
+
 
 configReg :: (HiddenClockResetEnable dom, KnownNat n) =>
     String -> (BitVector n) -> Signal dom (Maybe Bit) -> Signal dom (BitVector n)
-configReg initial flash = dout
+configReg name initial flash = dout
     where
-        dout = register initial new
+        dout = traceReg name initial new
         new = shiftIf <$> flash <*> dout
 
         shiftIf f old = case f of
@@ -139,15 +144,6 @@ instance (KnownNat n) => Default (FPGAInput n) where
         downf_in = repeat 0,
         rightf_in = repeat 0
     }
-
-main :: IO ()
-main = do
-    let configSig = pure $ Just 1
-    let topOut = topEntity systemClockGen systemResetGen enableGen configSig (pure def)
-    vcd <- dumpVCD (0, 203) topOut ["conf_0_3_v"]
-    case vcd of
-        Left msg -> error msg
-        Right contents -> TIO.writeFile "fpga.vcd" contents
 
 topEntity ::
     Clock System

@@ -14,7 +14,7 @@ class FPGA:
         for x in range(self.width):
             for y in range(self.height):
                 try:
-                    lut_config = self.config['tiles'][str(x) + ',' + str(y)]
+                    lut_config = DEFAULT_LUT_CONFIG | self.config['tiles'][str(x) + ',' + str(y)]
                 except KeyError:
                     lut_config = DEFAULT_LUT_CONFIG
                 self.tiles.append(Tile(self, lut_config, x, y))

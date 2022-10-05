@@ -2,6 +2,7 @@ import pygame
 from fpga import *
 from consts import *
 import json
+from pprint import pprint
 
 def save(surface, name):
     pygame.image.save(surface, name)
@@ -16,6 +17,9 @@ def load(config_name):
         config = json.load(file)
         return config
 
-fpga = FPGA(load("config.json"), 4, 4)
+config = load("config.json")
+fpga = FPGA(config, 4, 4)
+
+pprint(config)
 
 save(draw(fpga), "out.png")

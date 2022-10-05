@@ -10,6 +10,8 @@ import Data.List
 
 import Data.Aeson
 
+import Bitstream
+
 -------------
 -- Designs --
 -------------
@@ -41,6 +43,8 @@ clockConfig = FPGAConfig $ Map.fromList [
             vertLut = LUTConfig p_is_a True False
         })
     ]
+
+-- Generate a bitstream: printAligned $ bitstream def clockConfig
 
 -----------
 -- Types --
