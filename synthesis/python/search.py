@@ -9,7 +9,10 @@ def reconstruct(previous, current):
     total_path = [current]
     while current in previous:
         current = previous[current]
+        if current in total_path:
+            return total_path
         total_path.insert(0, current)
+        print(f"adding {current}")
     return total_path
 
 
@@ -49,21 +52,23 @@ def astar(grid, goal: Location, start: Location, signal, blacklist):
                 if neighbour not in gscore or gscore[neighbour] > tentative_gScore:
                     previous[neighbour] = current
                     gscore[neighbour] = tentative_gScore
-                    queue.put((tentative_gScore + neighbour.distance(goal), neighbour))
+                    queue.put((tentative_gScore + neighbour.distance(goal) + 1, neighbour))
 
 
 def astar2(grid, goal: Net, start: Net):
+    print(f"Finding path from {start.location} to {goal.location}")
     queue = PriorityQueue()
     iterations = 0
     previous = dict()
 
-    acceptable_luts = [o.parent for o in goal.outputs if o.parent.states == [State.DEFAULT, State.DEFAULT]]
+    acceptable_luts = [o.parent for o in goal.inputs if o.parent.states == [State.DEFAULT, State.DEFAULT]]
     g_score = {x: 0.0 for x in start.inputs}
 
     for i in start.inputs:
         queue.put((0.0, i))
 
     while queue.qsize() > 0:
+        print(queue.queue)
         if iterations > 50:
             return False
         iterations += 1
@@ -71,21 +76,23 @@ def astar2(grid, goal: Net, start: Net):
         score, current = queue.get()
         lut = current.parent
         if lut in acceptable_luts:
+            print("current", current, "previous", previous)
             return reconstruct(previous, current)
 
-        if lut.state != [State.DEFAULT, State.DEFAULT]:
+        if lut.states != [State.DEFAULT, State.DEFAULT]:
             continue
 
         for output in lut.outputs:
-            net = grid.getNet(output.tile.location)
+            net = grid.getNet(output.location)
             if net.assignment is not None:
                 continue
 
             for i in net.inputs:
                 tentative_g_score = g_score[current] + 1
-                previous[i] = current
-                g_score[i] = tentative_g_score
-                queue.put((tentative_g_score + i.location.distance(goal.location)))
+                if i not in g_score or g_score[i] > tentative_g_score:
+                    previous[i] = current
+                    g_score[i] = tentative_g_score
+                    queue.put((tentative_g_score + i.location.distance(goal.location), i))
 
 
 
