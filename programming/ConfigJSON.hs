@@ -55,7 +55,7 @@ data FPGACoordinate = FPGACoordinate {
     } deriving (Generic, Ord, Eq)
 
 instance Show FPGACoordinate where
-    show (FPGACoordinate x y) = show x ++ "," ++ show y
+    show (FPGACoordinate x y) = "(" ++ show x ++ "," ++ show y ++ ")"
 
 instance ToJSON FPGACoordinate where
     toEncoding = genericToEncoding defaultOptions
